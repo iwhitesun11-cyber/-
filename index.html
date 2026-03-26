@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>우리집 재정</title>
+
+<!-- PWA -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="우리집 재정">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="우리집 재정 현황 대시보드">
+<link rel="manifest" href="#" id="manifest-placeholder">
+
+<!-- PWA 아이콘 (SVG inline → canvas → base64) -->
+<script>
+(function(){
+  // 인라인 manifest
+  const manifest = {
+    name: "우리집 재정",
+    short_name: "재정",
+    description: "가계 재정 현황 대시보드",
+    start_url: "./",
+    display: "standalone",
+    background_color: "#0d1117",
+    theme_color: "#0d1117",
+    orientation: "portrait",
+    icons: [
+      { src: makeIcon(192), sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: makeIcon(512), sizes: "512x512", type: "image/png", purpose: "any maskable" }
+    ]
+  };
+  function makeIcon(size){
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    // Background
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0,0,size,size);
+    // Rounded rect background
+    const r = size * 0.22;
+    ctx.fillStyle = '#161b22';
+    ctx.beginPath();
+    ctx.roundRect(size*.08, size*.08, size*.84, size*.84, r);
+    ctx.fill();
+    // Chart bars
+    const bars = [0.4, 0.6, 0.5, 0.8, 0.65, 0.9];
+    const bw = size * 0.08, gap = size * 0.035;
+    const startX = size * 0.16;
+    const baseY = size * 0.78;
+    bars.forEach((h, i) => {
+      const barH = h * size * 0.45;
+      const x = startX + i * (bw + gap);
+      const colors = ['#58a6ff','#3fb950','#58a6ff','#d29922','#3fb950','#a371f7'];
+      ctx.fillStyle = colors[i];
+      ctx.beginPath();
+      ctx.roundRect(x, baseY - barH, bw, barH, 2);
+      ctx.fill();
+    });
+    // ₩ text
+    ctx.fillStyle = '#e6edf3';
+    ctx.font = `bold ${size*0.13}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('재정', size/2, size*0.92);
+    return c.toDataURL('image/png');
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    const icons = [192, 512].map(s => ({ src: makeIcon(s), sizes: s+'x192', type:'image/png', purpose:'any maskable' }));
+    const m = {...manifest, icons};
+    const blob = new Blob([JSON.stringify(m)], {type:'application/manifest+json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('link');
+    link.rel = 'manifest'; link.href = url;
+    document.head.appendChild(link);
+    document.getElementById('manifest-placeholder')?.remove();
+
+    // Apple touch icon
+    const appleLink = document.createElement('link');
+    appleLink.rel = 'apple-touch-icon';
+    appleLink.href = makeIcon(180);
+    document.head.appendChild(appleLink);
+  });
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--card2:#1c2330;--border:#21262d;
+  --blue:#58a6ff;--green:#3fb950;--amber:#d29922;--red:#f85149;--purple:#a371f7;
+  --text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'Noto Sans KR',sans-serif;color:var(--text);font-size:14px}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+
+/* Header */
+.hdr{flex-shrink:0;padding:14px 18px 10px;background:var(--bg);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.hdr-title{font-size:16px;font-weight:700;letter-spacing:-.5px}
+.hdr-date{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;margin-top:1px}
+.hdr-btn{width:30px;height:30px;border-radius:7px;background:var(--card2);border:1px solid var(--border);color:var(--text2);font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+/* Scroll */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:90px}
+.scroll::-webkit-scrollbar{display:none}
+
+/* Bottom Nav */
+.bnav{flex-shrink:0;display:flex;background:var(--card);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0)}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:9px 4px 7px;gap:2px;cursor:pointer;color:var(--text3);font-size:9px;font-weight:600;border:none;background:none;transition:color .15s}
+.bnav-item.active{color:var(--blue)}
+.bnav-icon{font-size:19px;line-height:1}
+
+/* Pages */
+.page{display:none}.page.active{display:block}
+
+/* Hero */
+.hero{padding:22px 18px 18px;background:linear-gradient(160deg,#161b22 0%,#1c2330 100%);border-bottom:1px solid var(--border)}
+.hero-lbl{font-size:11px;color:var(--text2);font-weight:500;margin-bottom:4px}
+.hero-amt{font-size:30px;font-weight:900;letter-spacing:-1px;font-family:'DM Mono',monospace}
+.hero-sub{font-size:11px;color:var(--text2);margin-top:4px}
+.hero-bar{height:5px;border-radius:99px;background:var(--border);overflow:hidden;display:flex;gap:1px;margin-top:14px}
+.hero-seg{height:100%;transition:width .8s cubic-bezier(.16,1,.3,1)}
+
+/* KPI scroll */
+.kpi-row{display:flex;gap:9px;padding:14px 14px 0;overflow-x:auto;scrollbar-width:none}
+.kpi-row::-webkit-scrollbar{display:none}
+.kpi{flex-shrink:0;width:120px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:13px 13px 11px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi.blue::before{background:var(--blue)}.kpi.green::before{background:var(--green)}
+.kpi.amber::before{background:var(--amber)}.kpi.purple::before{background:var(--purple)}.kpi.red::before{background:var(--red)}
+.kpi-lbl{font-size:10px;color:var(--text2);font-weight:500;margin-bottom:5px}
+.kpi-val{font-size:15px;font-weight:700;font-family:'DM Mono',monospace;letter-spacing:-.5px}
+.kpi-val.blue{color:var(--blue)}.kpi-val.green{color:var(--green)}.kpi-val.amber{color:var(--amber)}.kpi-val.purple{color:var(--purple)}.kpi-val.red{color:var(--red)}
+.kpi-sub{font-size:9px;color:var(--text2);margin-top:3px}
+
+/* Card */
+.card{background:var(--card);border:1px solid var(--border);border-radius:13px;margin:11px 14px 0;overflow:hidden}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;padding:13px 14px 11px;border-bottom:1px solid var(--border)}
+.card-title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px}
+.cdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.card-badge{font-size:10px;color:var(--text2);background:var(--card2);border-radius:6px;padding:2px 7px}
+
+/* Bar chart */
+.bar-list{padding:13px 14px;display:flex;flex-direction:column;gap:11px}
+.bar-meta{display:flex;justify-content:space-between;margin-bottom:4px}
+.bar-name{font-size:11px;color:var(--text2)}
+.bar-num{font-size:11px;font-family:'DM Mono',monospace;color:var(--text)}
+.bar-track{height:4px;background:var(--border);border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width .8s cubic-bezier(.16,1,.3,1)}
+
+/* Row */
+.row{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.row-info{flex:1;min-width:0}
+.row-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:10px;color:var(--text2);margin-top:2px}
+.row-right{text-align:right;flex-shrink:0}
+.row-amt{font-size:13px;font-weight:600;font-family:'DM Mono',monospace}
+.row-rate{font-size:10px;margin-top:1px;font-family:'DM Mono',monospace}
+.up{color:var(--green)}.dn{color:var(--red)}
+
+/* Badge */
+.badge{display:inline-block;font-size:9px;font-weight:600;padding:1px 6px;border-radius:20px;font-family:'DM Mono',monospace}
+.b-blue{background:rgba(88,166,255,.15);color:var(--blue)}
+.b-green{background:rgba(63,185,80,.15);color:var(--green)}
+.b-amber{background:rgba(210,153,34,.15);color:var(--amber)}
+.b-purple{background:rgba(163,113,247,.15);color:var(--purple)}
+.b-red{background:rgba(248,81,73,.15);color:var(--red)}
+
+/* Owner pills */
+.pills{display:flex;gap:7px;padding:11px 14px 0;overflow-x:auto;scrollbar-width:none}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex-shrink:0;padding:5px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text2);transition:all .15s;font-family:'Noto Sans KR',sans-serif}
+.pill.active{background:rgba(88,166,255,.15);border-color:var(--blue);color:var(--blue)}
+
+/* Segment tabs */
+.seg-tabs{display:flex;margin:11px 14px 0;background:var(--card2);border-radius:9px;padding:3px}
+.seg-tab{flex:1;text-align:center;padding:7px 4px;font-size:11px;font-weight:600;border-radius:7px;cursor:pointer;color:var(--text2);transition:all .15s;border:none;background:none;font-family:'Noto Sans KR',sans-serif}
+.seg-tab.active{background:var(--card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+
+/* Month nav */
+.month-nav{display:flex;align-items:center;background:var(--card2);border-radius:8px;border:1px solid var(--border)}
+.mnav-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;font-family:'Noto Sans KR',sans-serif}
+.mnav-lbl{font-size:11px;color:var(--text);font-family:'DM Mono',monospace;min-width:48px;text-align:center}
+
+/* Mini chart */
+.mini-chart{display:flex;align-items:flex-end;gap:4px;height:55px;padding:0 14px 12px}
+.mc-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
+.mc-bar{width:100%;border-radius:2px 2px 0 0}
+.mc-lbl{font-size:8px;color:var(--text3);white-space:nowrap}
+
+/* Price chart */
+.pc-wrap{padding:12px 14px}
+.pc-bars{display:flex;align-items:flex-end;gap:2px;height:65px}
+.pc-bar{width:100%;border-radius:3px 3px 0 0;min-width:4px}
+
+/* Stat row */
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+.stat-row:last-child{border-bottom:none}
+.stat-key{font-size:11px;color:var(--text2)}
+.stat-val{font-size:12px;font-family:'DM Mono',monospace;font-weight:600}
+
+/* Update banner */
+.update-banner{margin:11px 14px 0;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:11px;padding:11px 13px;display:none;align-items:center;gap:10px}
+.update-banner.show{display:flex}
+.ub-btn{flex-shrink:0;padding:6px 11px;border-radius:7px;background:var(--amber);color:#000;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif}
+
+/* Person card */
+.person-card{background:var(--card);border:1px solid var(--border);border-radius:13px;margin:11px 14px 0;overflow:hidden}
+.person-hdr{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.person-name{font-size:13px;font-weight:700}
+
+/* FAB */
+.fab{position:fixed;right:18px;bottom:calc(68px + env(safe-area-inset-bottom,0px));width:50px;height:50px;border-radius:14px;background:var(--blue);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(88,166,255,.4);cursor:pointer;border:none;z-index:50;transition:transform .15s}
+.fab:active{transform:scale(.93)}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100;display:none;align-items:flex-end;backdrop-filter:blur(4px)}
+.overlay.open{display:flex}
+.modal{width:100%;background:var(--card);border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom,16px);max-height:90vh;overflow-y:auto;animation:slideUp .22s cubic-bezier(.16,1,.3,1)}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-handle{width:34px;height:4px;background:var(--border);border-radius:99px;margin:11px auto 0}
+.modal-title{font-size:15px;font-weight:700;padding:14px 18px 10px}
+.modal-body{padding:0 18px 16px;display:flex;flex-direction:column;gap:11px}
+.form-lbl{font-size:11px;color:var(--text2);font-weight:500;margin-bottom:5px}
+.form-input{background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:11px 12px;font-size:13px;font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color .2s;width:100%}
+.form-input:focus{border-color:var(--blue)}
+select.form-input option{background:var(--card2)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.modal-actions{display:flex;gap:9px;padding:0 18px 6px}
+.btn{flex:1;padding:13px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn-ghost{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+.btn-primary{background:var(--blue);color:#fff}
+.type-pick-btn{display:flex;align-items:center;gap:12px;padding:14px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;width:100%;text-align:left;font-family:'Noto Sans KR',sans-serif}
+
+/* Action btns */
+.act{width:26px;height:26px;border-radius:6px;background:var(--card2);border:1px solid var(--border);color:var(--text2);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+.empty{text-align:center;padding:28px 14px;color:var(--text3);font-size:11px}
+.spacer{height:14px}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div class="hdr">
+  <div>
+    <div class="hdr-title">우리집 재정</div>
+    <div class="hdr-date" id="hdrDate"></div>
+  </div>
+  <div class="hdr-btn" onclick="exportData()">↓</div>
+</div>
+
+<div class="scroll" id="scroll">
+
+  <!-- ===== HOME ===== -->
+  <div class="page active" id="page-home">
+    <div class="hero">
+      <div class="hero-lbl">순자산</div>
+      <div class="hero-amt" id="hw-net">—</div>
+      <div class="hero-sub" id="hw-sub"></div>
+      <div class="hero-bar" id="hw-bar"></div>
+    </div>
+    <div class="kpi-row" id="hw-kpi"></div>
+    <div class="card">
+      <div class="card-hdr"><div class="card-title"><span class="cdot" style="background:var(--blue)"></span>자산 구성</div></div>
+      <div class="bar-list" id="hw-comp"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title"><span class="cdot" style="background:var(--green)"></span>이번달 수입</div>
+        <div class="card-badge" id="hw-inc-badge"></div>
+      </div>
+      <div id="hw-inc-list"></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ===== DEPOSIT ===== -->
+  <div class="page" id="page-deposit">
+    <div class="kpi-row" id="dep-kpi"></div>
+    <div class="card">
+      <div class="card-hdr"><div class="card-title"><span class="cdot" style="background:var(--blue)"></span>예금 목록</div><div class="card-badge" id="dep-cnt"></div></div>
+      <div id="dep-list"></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ===== STOCK ===== -->
+  <div class="page" id="page-stock">
+    <div class="pills" id="stk-pills"></div>
+    <div class="kpi-row" id="stk-kpi"></div>
+    <div class="seg-tabs">
+      <button class="seg-tab active" onclick="setStkSeg('stock',this)">일반주식</button>
+      <button class="seg-tab" onclick="setStkSeg('pension',this)">연금/IRP</button>
+    </div>
+    <div class="card" style="margin-top:11px"><div id="stk-list"></div></div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ===== REAL ESTATE ===== -->
+  <div class="page" id="page-re">
+    <div class="update-banner" id="re-banner">
+      <span style="font-size:17px">📅</span>
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:700;color:var(--amber)">이달 시세 업데이트 필요</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:1px">성산시영 실거래가를 반영해 주세요</div>
+      </div>
+      <button class="ub-btn" onclick="updateAptPrice()">업데이트</button>
+    </div>
+    <div class="kpi-row" id="re-kpi"></div>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title"><span class="cdot" style="background:var(--amber)"></span>성산시영 시세 추이</div>
+        <button style="font-size:10px;color:var(--amber);background:rgba(210,153,34,.1);border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-family:'Noto Sans KR',sans-serif" onclick="updateAptPrice()">🔄 업데이트</button>
+      </div>
+      <div class="pc-wrap" id="re-chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><div class="card-title"><span class="cdot" style="background:var(--amber)"></span>보유 현황</div></div>
+      <div id="re-list"></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ===== INCOME ===== -->
+  <div class="page" id="page-income">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0">
+      <div style="font-size:13px;font-weight:700">월별 수입</div>
+      <div class="month-nav">
+        <button class="mnav-btn" onclick="changeMonth(-1)">‹</button>
+        <span class="mnav-lbl" id="inc-month"></span>
+        <button class="mnav-btn" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <div class="kpi-row" id="inc-kpi"></div>
+    <div class="card">
+      <div class="card-hdr"><div class="card-title"><span class="cdot" style="background:var(--green)"></span>최근 6개월</div></div>
+      <div class="mini-chart" id="inc-chart"></div>
+    </div>
+    <div class="person-card">
+      <div class="person-hdr"><div class="person-name">👩 홍선미</div><div class="up" style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace" id="inc-hsm-tot">—</div></div>
+      <div id="inc-hsm"></div>
+    </div>
+    <div class="person-card">
+      <div class="person-hdr"><div class="person-name">👨 강상묵</div><div class="up" style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace" id="inc-ksm-tot">—</div></div>
+      <div id="inc-ksm"></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+</div><!-- /scroll -->
+
+<button class="fab" onclick="openAddModal()">＋</button>
+
+<div class="bnav">
+  <button class="bnav-item active" onclick="goPage('home',this)"><span class="bnav-icon">🏠</span>홈</button>
+  <button class="bnav-item" onclick="goPage('deposit',this)"><span class="bnav-icon">🏦</span>예금</button>
+  <button class="bnav-item" onclick="goPage('stock',this)"><span class="bnav-icon">📈</span>주식</button>
+  <button class="bnav-item" onclick="goPage('re',this)"><span class="bnav-icon">🏡</span>부동산</button>
+  <button class="bnav-item" onclick="goPage('income',this)"><span class="bnav-icon">💰</span>수입</button>
+</div>
+
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay" onclick="closeOut(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="m-title">추가</div>
+    <div class="modal-body" id="m-body"></div>
+    <div class="modal-actions" id="m-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveModal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+const SKEY='finance_v3';
+let S=load();
+let cModal=null,editId=null,cOff=0,sOwner='all',sSeg='stock';
+
+function load(){
+  try{const r=localStorage.getItem(SKEY);if(r)return JSON.parse(r);}catch(e){}
+  return def();
+}
+function save(){localStorage.setItem(SKEY,JSON.stringify(S));}
+
+function def(){
+  const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1,p=n=>String(n).padStart(2,'0');
+  return {
+    deposits:[
+      {id:1,name:'하나은행 적금 (월 30)',type:'정기적금',maturity:'2026-05-10',amount:3000000,maturityAmount:3600000},
+      {id:2,name:'하나은행 적금 (월 20)',type:'정기적금',maturity:'2026-06-02',amount:1800000,maturityAmount:2400000},
+      {id:3,name:'카카오뱅크 정기예금 ①',type:'정기예금',maturity:'2027-02-19',amount:25000000,maturityAmount:25630000},
+      {id:4,name:'IBK 정기예금 ①',type:'정기예금',maturity:'2027-02-27',amount:100000000,maturityAmount:100000000},
+      {id:5,name:'IBK 정기예금 ②',type:'정기예금',maturity:'2027-02-27',amount:30000000,maturityAmount:30000000},
+      {id:6,name:'카카오뱅크 정기예금 ②',type:'정기예금',maturity:'2027-02-27',amount:50000000,maturityAmount:51260000},
+      {id:7,name:'카카오뱅크 정기예금 ③',type:'정기예금',maturity:'2026-09-11',amount:35000000,maturityAmount:35500000},
+      {id:8,name:'카카오뱅크 정기예금 ④',type:'정기예금',maturity:'2027-02-21',amount:12000000,maturityAmount:12300000},
+      {id:9,name:'하나의정기예금',type:'정기예금',maturity:'2027-03-25',amount:10000000,maturityAmount:10610000},
+      {id:9,name:'하나의정기예금',type:'정기예금',maturity:'2027-03-25',amount:10000000,maturityAmount:10610000},
+    ],
+    stocks:[
+      // 홍선미 위탁
+      {id:101,owner:'홍선미',name:'삼성전자',account:'위탁',category:'stock',buyPrice:808000,curPrice:1863000},
+      {id:102,owner:'홍선미',name:'SK텔레콤',account:'위탁',category:'stock',buyPrice:255000,curPrice:222600},
+      {id:103,owner:'홍선미',name:'카카오뱅크',account:'위탁',category:'stock',buyPrice:156000,curPrice:94000},
+      {id:104,owner:'홍선미',name:'NAVER',account:'위탁',category:'stock',buyPrice:3188000,curPrice:2181600},
+      // 홍선미 ISA
+      {id:201,owner:'홍선미',name:'PLUS 200',account:'ISA중개형',category:'stock',buyPrice:645850,curPrice:1647400},
+      {id:202,owner:'홍선미',name:'HD현대',account:'ISA중개형',category:'stock',buyPrice:56500,curPrice:240500},
+      {id:203,owner:'홍선미',name:'효성',account:'ISA중개형',category:'stock',buyPrice:351309,curPrice:543200},
+      {id:204,owner:'홍선미',name:'HS효성',account:'ISA중개형',category:'stock',buyPrice:78191,curPrice:54900},
+      // 홍선미 연금
+      {id:301,owner:'홍선미',name:'PLUS 200',account:'연금저축',category:'pension',buyPrice:3207375,curPrice:6177750},
+      {id:302,owner:'홍선미',name:'KODEX 미국나스닥100',account:'연금저축',category:'pension',buyPrice:12018945,curPrice:16723000},
+      {id:303,owner:'홍선미',name:'KODEX 미국AI테크TOP10',account:'연금저축',category:'pension',buyPrice:4548000,curPrice:5145800},
+      {id:304,owner:'홍선미',name:'TIGER 나스닥100타겟데일리커버드콜',account:'연금저축',category:'pension',buyPrice:3672290,curPrice:3843400},
+      {id:401,owner:'홍선미',name:'퇴직연금 DC',account:'퇴직연금',category:'pension',buyPrice:23213283,curPrice:25777430},
+      // 강상묵 ISA
+      {id:501,owner:'강상묵',name:'HD현대',account:'ISA중개형',category:'stock',buyPrice:1917810,curPrice:7650000},
+      {id:502,owner:'강상묵',name:'삼성전자',account:'ISA중개형',category:'stock',buyPrice:6641300,curPrice:18730800},
+      {id:503,owner:'강상묵',name:'효성',account:'ISA중개형',category:'stock',buyPrice:7940790,curPrice:15962000},
+      {id:504,owner:'강상묵',name:'KT&G',account:'ISA중개형',category:'stock',buyPrice:2487900,curPrice:4354000},
+      {id:505,owner:'강상묵',name:'S-Oil',account:'ISA중개형',category:'stock',buyPrice:6678000,curPrice:11252800},
+      {id:506,owner:'강상묵',name:'오리온홀딩스',account:'ISA중개형',category:'stock',buyPrice:3324850,curPrice:5379000},
+      {id:507,owner:'강상묵',name:'LX홀딩스',account:'ISA중개형',category:'stock',buyPrice:3023000,curPrice:3352000},
+      {id:508,owner:'강상묵',name:'한국자산신탁',account:'ISA중개형',category:'stock',buyPrice:556165,curPrice:461700},
+      {id:509,owner:'강상묵',name:'HS효성',account:'ISA중개형',category:'stock',buyPrice:1767500,curPrice:1402500},
+      {id:510,owner:'강상묵',name:'롯데하이마트',account:'ISA중개형',category:'stock',buyPrice:763250,curPrice:357750},
+      // 강상묵 연금
+      {id:601,owner:'강상묵',name:'KODEX 미국나스닥100',account:'연금저축',category:'pension',buyPrice:6667400,curPrice:11261200},
+      {id:602,owner:'강상묵',name:'KODEX 미국S&P500',account:'연금저축',category:'pension',buyPrice:6309450,curPrice:10032750},
+      {id:603,owner:'강상묵',name:'KODEX 미국AI테크TOP10',account:'연금저축',category:'pension',buyPrice:4821600,curPrice:5328000},
+      {id:604,owner:'강상묵',name:'TIGER 나스닥100타겟데일리커버드콜',account:'연금저축',category:'pension',buyPrice:4480250,curPrice:4675900},
+      {id:605,owner:'강상묵',name:'TIGER 엔비디아미국채커버드콜밸런스',account:'연금저축',category:'pension',buyPrice:4291400,curPrice:4307600},
+      {id:606,owner:'강상묵',name:'KODEX 에너지화학',account:'연금저축',category:'pension',buyPrice:3000500,curPrice:2997000},
+      // 강상묵 위탁
+      {id:701,owner:'강상묵',name:'롯데쇼핑',account:'위탁',category:'stock',buyPrice:2989500,curPrice:2837700},
+      {id:702,owner:'강상묵',name:'LX홀딩스',account:'위탁',category:'stock',buyPrice:955460,curPrice:831600},
+      {id:703,owner:'강상묵',name:'아모레퍼시픽홀딩스',account:'위탁',category:'stock',buyPrice:1476100,curPrice:804750},
+      {id:704,owner:'강상묵',name:'호텔신라',account:'위탁',category:'stock',buyPrice:1630000,curPrice:858000},
+    ],
+    realestates:[
+      {id:1,name:'성산시영아파트',type:'아파트',acquired:'2024-06-01',
+       acquirePrice:890000000,curPrice:1330000000,mortgage:230000000,jeonse:310000000,
+       isTracked:true,lastUpdated:'2026-01-19',
+       note:'마포구 성산동 · 66.24㎡(50.03) · 주담대 2.3억+전세 3.1억',
+       priceHistory:[
+         {date:'2024-06',price:890000000},{date:'2024-07',price:920000000},
+         {date:'2024-08',price:960000000},{date:'2024-09',price:1000000000},
+         {date:'2024-10',price:1050000000},{date:'2024-11',price:1100000000},
+         {date:'2024-12',price:1150000000},{date:'2025-01',price:1200000000},
+         {date:'2025-02',price:1250000000},{date:'2025-03',price:1290000000},
+         {date:'2025-04',price:1290000000},{date:'2025-05',price:1290000000},
+         {date:'2025-06',price:1310000000},{date:'2025-07',price:1310000000},
+         {date:'2025-08',price:1320000000},{date:'2025-09',price:1330000000},
+         {date:'2025-10',price:1210000000},{date:'2025-11',price:1350000000},
+         {date:'2025-12',price:1390000000},{date:'2026-01',price:1330000000},
+       ]
+      },
+      {id:2,name:'전세자금 보증금',type:'전세',acquired:'2024-06-01',
+       acquirePrice:550000000,curPrice:550000000,mortgage:0,jeonse:0,
+       isTracked:false,note:'임차보증금 자산'},
+    ],
+    incomes:[
+      {id:1,owner:'홍선미',name:'월급',type:'in',category:'급여',date:`${y}-${p(m)}-25`,amount:9980000},
+      {id:2,owner:'강상묵',name:'월급',type:'in',category:'급여',date:`${y}-${p(m)}-25`,amount:6000000},
+    ]
+  };
+}
+
+// ── UTILS ──
+function fmt(n){
+  if(n>=100000000) return (n/100000000).toFixed(1)+'억';
+  if(n>=10000) return Math.round(n/10000)+'만';
+  return n.toLocaleString('ko-KR');
+}
+function fmtW(n){return n.toLocaleString('ko-KR')+'원';}
+function pct(a,b){return b===0?0:((a-b)/b*100);}
+function pctS(a,b){const v=pct(a,b);return (v>=0?'+':'')+v.toFixed(1)+'%';}
+function uid(){return Date.now()+Math.floor(Math.random()*9999);}
+function ms(off=0){const d=new Date();d.setMonth(d.getMonth()+off);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+
+// ── NAV ──
+function goPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(btn)btn.classList.add('active');
+  document.getElementById('scroll').scrollTop=0;
+  rPage(id);
+}
+function rPage(id){
+  if(id==='home')rHome();
+  else if(id==='deposit')rDeposit();
+  else if(id==='stock')rStock();
+  else if(id==='re')rRE();
+  else if(id==='income')rIncome();
+}
+
+// ── HOME ──
+function rHome(){
+  const dep=S.deposits.reduce((s,x)=>s+x.amount,0);
+  const stockOnly=S.stocks.filter(x=>x.category==='stock').reduce((s,x)=>s+x.curPrice,0);
+  const pension=S.stocks.filter(x=>x.category==='pension').reduce((s,x)=>s+x.curPrice,0);
+  const stockAll=stockOnly+pension;
+  const re=S.realestates.reduce((s,x)=>s+x.curPrice,0);
+  const debt=S.realestates.reduce((s,x)=>s+(x.mortgage||0)+(x.jeonse||0),0);
+  const total=dep+stockAll+re;
+  const net=total-debt;
+  const cur=ms(0);
+  const monthInc=S.incomes.filter(x=>x.type==='in'&&x.date.startsWith(cur)).reduce((s,x)=>s+x.amount,0);
+
+  document.getElementById('hw-net').textContent=fmt(net)+'원';
+  document.getElementById('hw-sub').textContent=`총자산 ${fmt(total)} · 부채 ${fmt(debt)}`;
+  document.getElementById('hw-bar').innerHTML=[
+    {val:dep,c:'var(--blue)'},{val:stockOnly,c:'var(--green)'},
+    {val:pension,c:'var(--purple)'},{val:re,c:'var(--amber)'}
+  ].map(s=>`<div class="hero-seg" style="width:${total>0?s.val/total*100:0}%;background:${s.c}"></div>`).join('');
+
+  document.getElementById('hw-kpi').innerHTML=[
+    {l:'예금',v:fmt(dep),c:'blue'},
+    {l:'주식',v:fmt(stockOnly),c:'green'},
+    {l:'연금/IRP',v:fmt(pension),c:'purple'},
+    {l:'이달 수입',v:fmt(monthInc),c:'amber'},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val ${k.c}">${k.v}</div></div>`).join('');
+
+  const comps=[
+    {l:'예금',v:dep,c:'var(--blue)'},
+    {l:'주식',v:stockOnly,c:'var(--green)'},
+    {l:'연금/IRP',v:pension,c:'var(--purple)'},
+    {l:'부동산',v:re,c:'var(--amber)'},
+  ];
+  document.getElementById('hw-comp').innerHTML=comps.map(c=>`
+    <div>
+      <div class="bar-meta"><span class="bar-name">${c.l}</span><span class="bar-num">${fmt(c.v)} (${total>0?(c.v/total*100).toFixed(0):0}%)</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${total>0?c.v/total*100:0}%;background:${c.c}"></div></div>
+    </div>`).join('');
+
+  const incList=S.incomes.filter(x=>x.type==='in'&&x.date.startsWith(cur));
+  document.getElementById('hw-inc-badge').textContent=fmtW(monthInc);
+  document.getElementById('hw-inc-list').innerHTML=incList.length?incList.map(x=>`
+    <div class="row">
+      <div class="row-icon" style="background:rgba(63,185,80,.12)">💰</div>
+      <div class="row-info"><div class="row-name">${x.name}</div><div class="row-sub">${x.owner||''}</div></div>
+      <div class="row-right"><div class="row-amt up">+${fmt(x.amount)}</div><div class="row-rate">${x.category}</div></div>
+    </div>`).join(''):'<div class="empty">이달 수입 없음</div>';
+}
+
+// ── DEPOSIT ──
+function rDeposit(){
+  const tot=S.deposits.reduce((s,x)=>s+x.amount,0);
+  const totM=S.deposits.reduce((s,x)=>s+(x.maturityAmount||x.amount),0);
+  const intr=totM-tot;
+  document.getElementById('dep-kpi').innerHTML=[
+    {l:'현재 잔액',v:fmt(tot),s:S.deposits.length+'개',c:'blue'},
+    {l:'만기 수령액',v:fmt(totM),s:'이자 포함',c:'green'},
+    {l:'예상 이자',v:fmt(intr),s:tot>0?((intr/tot)*100).toFixed(1)+'%':'',c:'amber'},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val ${k.c}">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
+  document.getElementById('dep-cnt').textContent=S.deposits.length+'개';
+  document.getElementById('dep-list').innerHTML=S.deposits.length?S.deposits.map(d=>{
+    const mat=d.maturityAmount||d.amount,gain=mat-d.amount;
+    return `<div class="row">
+      <div class="row-icon" style="background:rgba(88,166,255,.12)">🏦</div>
+      <div class="row-info">
+        <div class="row-name">${d.name}</div>
+        <div class="row-sub"><span class="badge b-blue">${d.type}</span>${d.maturity?' · '+d.maturity:''}</div>
+      </div>
+      <div class="row-right">
+        <div class="row-amt" style="color:var(--blue)">${fmt(d.amount)}</div>
+        <div class="row-rate up">만기 ${fmt(mat)}</div>
+      </div>
+      <button class="act" onclick="editItem('deposit',${d.id})">✎</button>
+      <button class="act" onclick="delItem('deposit',${d.id})">✕</button>
+    </div>`;
+  }).join(''):'<div class="empty">예금 없음</div>';
+}
+
+// ── STOCK ──
+function setStkSeg(seg,btn){
+  sSeg=seg;
+  document.querySelectorAll('.seg-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  rStock();
+}
+function setStkOwner(o){sOwner=o;rStock();}
+
+function rStock(){
+  const owners=['all',...new Set(S.stocks.map(x=>x.owner||'기타'))];
+  document.getElementById('stk-pills').innerHTML=owners.map(o=>
+    `<button class="pill ${sOwner===o?'active':''}" onclick="setStkOwner('${o}')">${o==='all'?'전체':o}</button>`
+  ).join('');
+
+  const base=sOwner==='all'?S.stocks:S.stocks.filter(x=>(x.owner||'기타')===sOwner);
+  const stkBase=base.filter(x=>x.category==='stock');
+  const penBase=base.filter(x=>x.category==='pension');
+  const sC=stkBase.reduce((s,x)=>s+x.curPrice,0),sB=stkBase.reduce((s,x)=>s+x.buyPrice,0);
+  const pC=penBase.reduce((s,x)=>s+x.curPrice,0),pB=penBase.reduce((s,x)=>s+x.buyPrice,0);
+  const tC=sC+pC,tB=sB+pB;
+
+  document.getElementById('stk-kpi').innerHTML=[
+    {l:'주식',v:fmt(sC),s:pctS(sC,sB),c:'green',u:sC>=sB},
+    {l:'연금/IRP',v:fmt(pC),s:pctS(pC,pB),c:'purple',u:pC>=pB},
+    {l:'합계',v:fmt(tC),s:pctS(tC,tB),c:'blue',u:tC>=tB},
+    {l:'평가손익',v:fmt(tC-tB),s:'수익금',c:tC>=tB?'green':'red',u:tC>=tB},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val ${k.c}">${k.v}</div><div class="kpi-sub ${k.u?'up':'dn'}">${k.s}</div></div>`).join('');
+
+  const filtered=base.filter(x=>x.category===sSeg);
+  document.getElementById('stk-list').innerHTML=filtered.length?filtered.map(x=>{
+    const r=pct(x.curPrice,x.buyPrice),g=x.curPrice-x.buyPrice,u=r>=0;
+    return `<div class="row">
+      <div class="row-icon" style="background:${u?'rgba(63,185,80,.12)':'rgba(248,81,73,.12)'}">${x.category==='pension'?'🏦':'📊'}</div>
+      <div class="row-info">
+        <div class="row-name">${x.name}</div>
+        <div class="row-sub"><span class="badge ${x.category==='pension'?'b-purple':'b-blue'}">${x.account}</span> · ${x.owner||''}</div>
+      </div>
+      <div class="row-right">
+        <div class="row-amt ${u?'up':'dn'}">${fmt(x.curPrice)}</div>
+        <div class="row-rate ${u?'up':'dn'}">${u?'+':''}${r.toFixed(1)}%</div>
+      </div>
+      <button class="act" onclick="editItem('stock',${x.id})">✎</button>
+      <button class="act" onclick="delItem('stock',${x.id})">✕</button>
+    </div>`;
+  }).join(''):'<div class="empty">항목 없음</div>';
+}
+
+// ── REAL ESTATE ──
+function rRE(){
+  const apt=S.realestates.find(x=>x.isTracked);
+  const tC=S.realestates.reduce((s,x)=>s+x.curPrice,0);
+  const tA=S.realestates.reduce((s,x)=>s+x.acquirePrice,0);
+  const tD=S.realestates.reduce((s,x)=>s+(x.mortgage||0)+(x.jeonse||0),0);
+  const net=tC-tD;
+
+  if(apt){
+    const today=new Date(),cur=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+    const b=document.getElementById('re-banner');
+    today.getDate()<=10&&(apt.lastUpdated||'')<cur?b.classList.add('show'):b.classList.remove('show');
+  }
+
+  document.getElementById('re-kpi').innerHTML=[
+    {l:'시세 합계',v:fmt(tC),s:pctS(tC,tA),c:'amber',u:tC>=tA},
+    {l:'총 부채',v:fmt(tD),s:'주담대+전세',c:'red',u:false},
+    {l:'순자산',v:fmt(net),s:`LTV ${tC>0?(tD/tC*100).toFixed(0):0}%`,c:'green',u:true},
+    {l:'시세차익',v:fmt(tC-tA),s:'취득가 대비',c:'blue',u:tC>=tA},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val ${k.c}">${k.v}</div><div class="kpi-sub ${k.u?'up':'dn'}">${k.s}</div></div>`).join('');
+
+  const chartEl = document.getElementById('re-chart');
+  if(apt && apt.priceHistory && apt.priceHistory.length > 0){
+    const h = apt.priceHistory.slice(-14);
+    const maxP = Math.max(...h.map(x=>x.price));
+    const minP = Math.min(...h.map(x=>x.price));
+    const rng = maxP - minP || 1;
+    const chartH = 70;
+    chartEl.innerHTML = `
+      <div style="display:flex;align-items:flex-end;gap:3px;height:${chartH}px;width:100%">
+        ${h.map((x,i)=>{
+          const ht = Math.max(10, ((x.price-minP)/rng)*(chartH-16)+10);
+          const isLast = i === h.length-1;
+          const isHigh = x.price === maxP;
+          const isLow = x.price === minP;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:${chartH}px">
+            ${isLast||isHigh||isLow ? `<div style="font-size:8px;color:${isLast?'var(--amber)':isHigh?'var(--green)':'var(--red)'};margin-bottom:2px;white-space:nowrap">${fmt(x.price)}</div>` : ''}
+            <div style="width:100%;height:${ht}px;background:${isLast?'var(--amber)':isHigh?'rgba(63,185,80,.5)':isLow?'rgba(248,81,73,.4)':'rgba(210,153,34,.35)'};border-radius:3px 3px 0 0;min-width:4px"></div>
+            <div style="font-size:8px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden">${x.date.slice(2)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:10px;padding:0 2px">
+        <span style="font-size:10px;color:var(--red)">최저 ${fmt(minP)}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--amber)">현재 ${fmt(apt.curPrice)}</span>
+        <span style="font-size:10px;color:var(--green)">최고 ${fmt(maxP)}</span>
+      </div>`;
+  } else {
+    chartEl.innerHTML = '<div class="empty">시세 데이터 없음</div>';
+  }
+
+  document.getElementById('re-list').innerHTML=S.realestates.map(r=>{
+    const d=(r.mortgage||0)+(r.jeonse||0),net2=r.curPrice-d,g=r.curPrice-r.acquirePrice;
+    return `<div class="row" style="align-items:flex-start;padding:13px 14px">
+      <div class="row-icon" style="background:rgba(210,153,34,.12);margin-top:1px">🏠</div>
+      <div class="row-info">
+        <div class="row-name">${r.name}</div>
+        <div class="row-sub" style="margin-top:2px"><span class="badge b-amber">${r.type}</span></div>
+        ${r.note?`<div style="font-size:9px;color:var(--text3);margin-top:3px">${r.note}</div>`:''}
+        <div style="font-size:10px;color:var(--text2);margin-top:5px">
+          취득 ${fmt(r.acquirePrice)} → 현재 <span class="${g>=0?'up':'dn'}">${fmt(r.curPrice)}</span>
+          ${d>0?`<br>부채 ${fmt(d)} · 순자산 <span class="up">${fmt(net2)}</span>`:''}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
+        <div style="font-size:13px;font-weight:700;color:var(--amber)">${fmt(r.curPrice)}</div>
+        <div class="row-rate ${g>=0?'up':'dn'}">${g>=0?'+':''}${fmt(g)}</div>
+        <div style="display:flex;gap:4px">
+          <button class="act" onclick="editItem('realestate',${r.id})">✎</button>
+          <button class="act" onclick="delItem('realestate',${r.id})">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateAptPrice(){
+  const apt=S.realestates.find(x=>x.isTracked);if(!apt)return;
+  // Use modal instead of prompt for mobile compatibility
+  cModal='_aptprice'; editId=null;
+  document.getElementById('m-title').textContent='📅 성산시영 시세 업데이트';
+  document.getElementById('m-body').innerHTML=`
+    <div>
+      <div class="form-lbl">현재 시세 (원)</div>
+      <input class="form-input" id="f-apt-price" type="number" value="${apt.curPrice}"
+        style="font-size:16px;font-weight:700" inputmode="numeric">
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:4px">
+      국토부 실거래가 기준으로 입력해 주세요<br>
+      마지막 업데이트: ${apt.lastUpdated||'없음'}
+    </div>`;
+  document.getElementById('m-actions').style.display='flex';
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(()=>{const el=document.getElementById('f-apt-price');if(el){el.focus();el.select();}},300);
+}
+
+function saveAptPrice(){
+  const apt=S.realestates.find(x=>x.isTracked);if(!apt)return;
+  const p=parseInt((document.getElementById('f-apt-price')?.value||'').replace(/[^0-9]/g,''));
+  if(!p||isNaN(p))return alert('금액을 입력해 주세요');
+  const today=new Date(),cur=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+  apt.curPrice=p;apt.lastUpdated=cur;
+  if(!apt.priceHistory)apt.priceHistory=[];
+  const ex=apt.priceHistory.find(h=>h.date===cur);
+  if(ex)ex.price=p;else apt.priceHistory.push({date:cur,price:p});
+  save();closeModal();rRE();
+}
+
+// ── INCOME ──
+function rIncome(){
+  const cur=ms(cOff);const[y,m]=cur.split('-');
+  document.getElementById('inc-month').textContent=`${y}.${m}`;
+  const fil=S.incomes.filter(x=>x.type==='in'&&x.date.startsWith(cur));
+  const hsm=fil.filter(x=>(x.owner||'')==='홍선미');
+  const ksm=fil.filter(x=>(x.owner||'')==='강상묵');
+  const tH=hsm.reduce((s,x)=>s+x.amount,0),tK=ksm.reduce((s,x)=>s+x.amount,0),tot=tH+tK;
+
+  document.getElementById('inc-kpi').innerHTML=[
+    {l:'합산 수입',v:fmt(tot),c:'green'},
+    {l:'홍선미',v:fmt(tH),s:tot>0?(tH/tot*100).toFixed(0)+'%':'',c:'blue'},
+    {l:'강상묵',v:fmt(tK),s:tot>0?(tK/tot*100).toFixed(0)+'%':'',c:'purple'},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val ${k.c}">${k.v}</div><div class="kpi-sub">${k.s||''}</div></div>`).join('');
+
+  const months=[];
+  for(let i=-5;i<=0;i++){
+    const s=ms(cOff+i);
+    const v=S.incomes.filter(x=>x.type==='in'&&x.date.startsWith(s)).reduce((a,x)=>a+x.amount,0);
+    months.push({l:s.slice(5)+'월',v});
+  }
+  const mx=Math.max(...months.map(m=>m.v),1);
+  document.getElementById('inc-chart').innerHTML=months.map((m,i)=>`
+    <div class="mc-col">
+      <div class="mc-bar" style="height:${Math.max(3,m.v/mx*44)}px;background:${i===5?'var(--green)':'rgba(63,185,80,.3)'}"></div>
+      <div class="mc-lbl">${m.l}</div>
+    </div>`).join('');
+
+  const row=x=>`<div class="row">
+    <div class="row-icon" style="background:rgba(63,185,80,.12)">💰</div>
+    <div class="row-info"><div class="row-name">${x.name}</div><div class="row-sub"><span class="badge b-green">${x.category}</span></div></div>
+    <div class="row-right"><div class="row-amt up">+${fmtW(x.amount)}</div></div>
+    <button class="act" onclick="editItem('income',${x.id})">✎</button>
+    <button class="act" onclick="delItem('income',${x.id})">✕</button>
+  </div>`;
+
+  document.getElementById('inc-hsm-tot').textContent=fmtW(tH);
+  document.getElementById('inc-ksm-tot').textContent=fmtW(tK);
+  document.getElementById('inc-hsm').innerHTML=hsm.length?hsm.map(row).join(''):'<div class="empty">수입 없음</div>';
+  document.getElementById('inc-ksm').innerHTML=ksm.length?ksm.map(row).join(''):'<div class="empty">수입 없음</div>';
+}
+function changeMonth(d){cOff+=d;rIncome();}
+
+// ── MODAL ──
+const FORMS={
+  deposit:d=>`
+    <div><div class="form-lbl">은행/상품명</div><input class="form-input" id="f-name" value="${d?.name||''}"></div>
+    <div class="form-row">
+      <div><div class="form-lbl">종류</div><select class="form-input" id="f-type">${['수시입출금','정기예금','정기적금','CMA','파킹통장'].map(t=>`<option ${d?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div><div class="form-lbl">만기일</div><input class="form-input" id="f-maturity" type="date" value="${d?.maturity||''}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-lbl">현재 잔액(원)</div><input class="form-input" id="f-amount" type="number" value="${d?.amount||''}"></div>
+      <div><div class="form-lbl">만기 수령액(원)</div><input class="form-input" id="f-mat-amt" type="number" value="${d?.maturityAmount||''}"></div>
+    </div>`,
+  stock:d=>`
+    <div><div class="form-lbl">종목명/상품명</div><input class="form-input" id="f-name" value="${d?.name||''}"></div>
+    <div class="form-row">
+      <div><div class="form-lbl">명의인</div><select class="form-input" id="f-owner"><option ${d?.owner==='홍선미'?'selected':''}>홍선미</option><option ${d?.owner==='강상묵'?'selected':''}>강상묵</option></select></div>
+      <div><div class="form-lbl">분류</div><select class="form-input" id="f-cat"><option value="stock" ${d?.category==='stock'?'selected':''}>일반주식</option><option value="pension" ${d?.category==='pension'?'selected':''}>연금/IRP</option></select></div>
+    </div>
+    <div><div class="form-lbl">계좌</div><input class="form-input" id="f-acc" value="${d?.account||''}"></div>
+    <div class="form-row">
+      <div><div class="form-lbl">매수금액(원)</div><input class="form-input" id="f-buy" type="number" value="${d?.buyPrice||''}"></div>
+      <div><div class="form-lbl">평가금액(원)</div><input class="form-input" id="f-cur" type="number" value="${d?.curPrice||''}"></div>
+    </div>`,
+  realestate:d=>`
+    <div><div class="form-lbl">주소/명칭</div><input class="form-input" id="f-name" value="${d?.name||''}"></div>
+    <div class="form-row">
+      <div><div class="form-lbl">종류</div><select class="form-input" id="f-type">${['아파트','빌라','오피스텔','단독주택','전세'].map(t=>`<option ${d?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div><div class="form-lbl">취득일</div><input class="form-input" id="f-acq" type="date" value="${d?.acquired||''}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-lbl">취득가(원)</div><input class="form-input" id="f-acq-p" type="number" value="${d?.acquirePrice||''}"></div>
+      <div><div class="form-lbl">현재시세(원)</div><input class="form-input" id="f-cur-p" type="number" value="${d?.curPrice||''}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-lbl">주담대(원)</div><input class="form-input" id="f-mort" type="number" value="${d?.mortgage||0}"></div>
+      <div><div class="form-lbl">전세보증금(원)</div><input class="form-input" id="f-jeon" type="number" value="${d?.jeonse||0}"></div>
+    </div>`,
+  income:d=>`
+    <div><div class="form-lbl">항목명</div><input class="form-input" id="f-name" value="${d?.name||''}"></div>
+    <div class="form-row">
+      <div><div class="form-lbl">명의인</div><select class="form-input" id="f-owner"><option ${d?.owner==='홍선미'?'selected':''}>홍선미</option><option ${d?.owner==='강상묵'?'selected':''}>강상묵</option></select></div>
+      <div><div class="form-lbl">카테고리</div><select class="form-input" id="f-cat">${['급여','부업','이자','배당','기타'].map(t=>`<option ${d?.category===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-lbl">날짜</div><input class="form-input" id="f-date" type="date" value="${d?.date||new Date().toISOString().slice(0,10)}"></div>
+      <div><div class="form-lbl">금액(원)</div><input class="form-input" id="f-amt" type="number" value="${d?.amount||''}"></div>
+    </div>`,
+};
+const TYPES=[{v:'deposit',l:'🏦 예금'},{v:'stock',l:'📈 주식/연금'},{v:'realestate',l:'🏡 부동산'},{v:'income',l:'💰 수입'}];
+
+function openAddModal(){
+  editId=null;cModal='_pick';
+  document.getElementById('m-title').textContent='무엇을 추가할까요?';
+  document.getElementById('m-body').innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">${TYPES.map(t=>`<button class="type-pick-btn" onclick="pickType('${t.v}')">${t.l}</button>`).join('')}</div>`;
+  document.getElementById('m-actions').style.display='none';
+  document.getElementById('overlay').classList.add('open');
+}
+function pickType(type){
+  cModal=type;editId=null;
+  document.getElementById('m-title').textContent=TYPES.find(t=>t.v===type)?.l||'추가';
+  document.getElementById('m-body').innerHTML=FORMS[type]();
+  document.getElementById('m-actions').style.display='flex';
+}
+function editItem(type,id){
+  cModal=type;editId=id;
+  const maps={deposit:S.deposits,stock:S.stocks,realestate:S.realestates,income:S.incomes};
+  const data=maps[type].find(x=>x.id==id);
+  document.getElementById('m-title').textContent='수정';
+  document.getElementById('m-body').innerHTML=FORMS[type](data);
+  document.getElementById('m-actions').style.display='flex';
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal(){document.getElementById('overlay').classList.remove('open');document.getElementById('m-actions').style.display='flex';cModal=null;editId=null;}
+function closeOut(e){if(e.target===document.getElementById('overlay'))closeModal();}
+
+function gv(id){const e=document.getElementById(id);return e?e.value:'';}
+function gn(id){const v=parseFloat(gv(id).replace(/[^0-9.]/g,''));return isNaN(v)?0:v;}
+
+function saveModal(){
+  const t=cModal;if(!t||t==='_pick')return;
+  if(t==='_aptprice'){saveAptPrice();return;}
+  if(t==='deposit'){
+    const item={id:editId||uid(),name:gv('f-name'),type:gv('f-type'),maturity:gv('f-maturity'),amount:gn('f-amount'),maturityAmount:gn('f-mat-amt')||gn('f-amount')};
+    if(!item.name)return alert('이름을 입력하세요');
+    upsert('deposits',item);
+  }else if(t==='stock'){
+    const item={id:editId||uid(),owner:gv('f-owner'),name:gv('f-name'),account:gv('f-acc'),category:gv('f-cat'),buyPrice:gn('f-buy'),curPrice:gn('f-cur')};
+    if(!item.name)return alert('종목명을 입력하세요');
+    upsert('stocks',item);
+  }else if(t==='realestate'){
+    const item={id:editId||uid(),name:gv('f-name'),type:gv('f-type'),acquired:gv('f-acq'),acquirePrice:gn('f-acq-p'),curPrice:gn('f-cur-p'),mortgage:gn('f-mort'),jeonse:gn('f-jeon'),isTracked:false};
+    if(!item.name)return alert('명칭을 입력하세요');
+    upsert('realestates',item);
+  }else if(t==='income'){
+    const item={id:editId||uid(),owner:gv('f-owner'),name:gv('f-name'),type:'in',category:gv('f-cat'),date:gv('f-date'),amount:gn('f-amt')};
+    if(!item.name)return alert('항목명을 입력하세요');
+    upsert('incomes',item);
+  }
+  save();closeModal();
+  const pg=document.querySelector('.page.active')?.id?.replace('page-','');
+  if(pg)rPage(pg);
+}
+function upsert(col,item){const i=S[col].findIndex(x=>x.id==item.id);if(i>=0)S[col][i]=item;else S[col].push(item);}
+function delItem(col,id){
+  if(!confirm('삭제할까요?'))return;
+  const m={deposit:'deposits',stock:'stocks',realestate:'realestates',income:'incomes'};
+  S[m[col]]=S[m[col]].filter(x=>x.id!=id);
+  save();
+  const pg=document.querySelector('.page.active')?.id?.replace('page-','');
+  if(pg)rPage(pg);
+}
+function exportData(){
+  const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download=`재정_${new Date().toISOString().slice(0,10)}.json`;a.click();
+}
+
+// ── INIT ──
+const d=new Date();
+document.getElementById('hdrDate').textContent=`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+rHome();
+
+// ── PWA Install ──
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').style.display = 'none';
+  deferredPrompt = null;
+});
+
+function installApp(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(r => {
+      if(r.outcome==='accepted') document.getElementById('install-banner').style.display='none';
+      deferredPrompt = null;
+    });
+  }
+}
+
+// Service Worker 등록
+if('serviceWorker' in navigator){
+  const swCode = `
+    const CACHE = 'finance-v3';
+    const ASSETS = ['./', './index.html'];
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./'))));
+    });
+  `;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+</script>
+
+<!-- Install Banner -->
+<div id="install-banner" style="
+  display:none;position:fixed;bottom:calc(70px + env(safe-area-inset-bottom,0px));
+  left:14px;right:14px;z-index:80;
+  background:#1c2330;border:1px solid #58a6ff;border-radius:13px;
+  padding:12px 14px;display:none;align-items:center;gap:12px;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+">
+  <span style="font-size:22px">📲</span>
+  <div style="flex:1">
+    <div style="font-size:12px;font-weight:700;color:#e6edf3">홈 화면에 앱으로 설치</div>
+    <div style="font-size:10px;color:#8b949e;margin-top:1px">오프라인에서도 사용 가능</div>
+  </div>
+  <button onclick="installApp()" style="
+    padding:8px 14px;background:#58a6ff;color:#000;border:none;
+    border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+    font-family:'Noto Sans KR',sans-serif;flex-shrink:0;
+  ">설치</button>
+  <button onclick="this.parentElement.style.display='none'" style="
+    width:24px;height:24px;background:none;border:none;color:#8b949e;
+    font-size:16px;cursor:pointer;flex-shrink:0;padding:0;
+  ">✕</button>
+</div>
+
+</body>
+</html>
